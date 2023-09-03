@@ -1,0 +1,3 @@
+[submodule "writer"]
+	path = writer
+	url = https://github.com/audreyaiai/OpenAI_SKT.git
