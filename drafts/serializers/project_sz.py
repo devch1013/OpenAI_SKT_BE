@@ -11,7 +11,7 @@ class ProjectNameListSz(sz.ModelSerializer):
 class ProjectSaveSz(sz.ModelSerializer):
     class Meta:
         model = Project
-        exclude = ["table"]
+        fields = ["project_name", "purpose"]
 
 
 class ProjectGetSz(sz.ModelSerializer):
@@ -24,3 +24,12 @@ class UpdateTableSz(sz.ModelSerializer):
     class Meta:
         model = Project
         fields = ["table"]
+
+
+class CreateFirstDraftSz(sz.Serializer):
+    suggestion_selection = sz.ListField(child = sz.CharField(), required=True)
+    web_pages = sz.ListField(child = sz.CharField(), required=False, default=[])
+    files = sz.ListField(child = sz.CharField(), required=False, default=[])
+    text = sz.ListField(child = sz.CharField(), required=False, default=[])
+    image = sz.ListField(child = sz.CharField(), required=False, default=[])
+    youtube = sz.ListField(child = sz.CharField(), required=False, default=[])

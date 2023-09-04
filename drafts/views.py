@@ -6,17 +6,18 @@ from .models import *
 from .serializers.project_sz import *
 from .serializers.draft_sz import *
 from .serializers.response_sz import *
-from .tasks import add as od
+from .tasks import get_suggestion, write_first_draft
 from .apps import DraftsConfig
 from writer.openai_skt.modules import Project as ProjectAi
 from drf_yasg.utils import swagger_auto_schema
 import pickle
+from django.db.models import Q
 
 # Create your views here.
 
 
 def test(request):
-    od.delay(1, 3)
+    # od.delay(1, 3)
     return JsonResponse({})
 
 
@@ -40,16 +41,15 @@ class Projects(APIView):
     )
     def post(self, request):
         """
-        request body의 user는 자동으로 들어가니 안주셔도 됩니다.
         프로젝트 이름과 purpose를 주면 목차를 생성하고 생성된 프로젝트 id와 함께 반환됩니다.
         """
         user = request.user
-        project = ProjectSaveSz(data={**request.data, "user": user.id})
+        project = ProjectSaveSz(data=request.data)
         project.is_valid(raise_exception=True)
-        project_db = project.save()
+        project_db = project.save(user=user)
         print(project.validated_data.get("purpose"))
         project_instance = ProjectAi(
-            user_id="test_2",
+            user_id=project_db.id,
             **(DraftsConfig.instances),
         )
         project_instance.set_purpose(purpose=project.validated_data.get("purpose"))
@@ -94,16 +94,34 @@ class SingleProject(APIView):
 
 
 class TableView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Table 수정 후 Suggestion 생성(project당 한번만 사용)",
+        tags=["Project"],
+        request_body=UpdateTableSz(),
+        responses={200: SuccessResponseSz()},
+    )
     def post(self, request, project_id):
         """
         업데이트 된 index 받아서 저장 후 suggestion 생성(처음에만)
-        들어오묜
+        Suggestion 생성에 시간이 소요되기 때문에 비동기로 처리됩니다.
+        요청이 정상적으로 처리되었을 경우 바로 200 응답이 반환됩니다.
+        suggestion 결과는 "suggestion 생성 완료 확인" API를 사용하시면 됩니다.
         """
+        print("table update request")
         project = Project.objects.get(id=project_id)
+        if project.suggestion_flag == True:
+            return JsonResponse({"message": "suggestion already created"}, status=400)
         project_sz = UpdateTableSz(project, data=request.data)
-        if project_sz.is_valid():
-            project_sz.save()
-        ## TODO Suggestion 생성 시작 (비동기)
+        if project_sz.is_valid(raise_exception=True):
+            project = project_sz.save()
+
+        print("celery start")
+        get_suggestion.delay(
+            project_id=project_id,
+            purpose=project.purpose,
+            table=project.table,
+        )
+        print("celery end")
         return JsonResponse({"message": "suggestion generation started"})
 
     def put(self, project_id):
@@ -123,12 +141,53 @@ class DataSourceView(APIView):
         """
         ...
 
+
+class FirstDraftView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Data source 추가 후 첫 draft 생성",
+        tags=["Draft"],
+        request_body=CreateFirstDraftSz(),
+        responses={200: DraftResponseSz()},
+    )
     def post(self, request, project_id):
         """
-        첫 데이터 소스 업데이트
-        + draft 생성
+        첫 데이터 소스 업데이트 후 draft 생성
+        유저가 고른 suggestion의 종류("kostat", "youtube", "google", "naver") 중 선택해서 리스트 형태로 주시면 됩니다.
+        유저가 추가한 source의 경우는 body 예시를 보시고 각 카테고리에 맞는 데이터를 리스트 형태로 넣어주세요.
+        Suggestion 생성과 마찬가지로 시간이 소요되기 때문에 비동기로 처리됩니다.
+        요청이 정상적으로 처리되었을 경우 바로 200 응답이 반환됩니다.
+        결과는 반환되는 draft_id로 "Draft 생성 완료 확인" API를 참고하시면 됩니다.
         """
-        ...
+        project = Project.objects.get(id=project_id)
+        user_files = list()
+        source_input_list = ["web_pages", "files", "text", "image", "youtube"]
+        draft_input = CreateFirstDraftSz(data=request.data)
+        draft_input.is_valid(raise_exception=True)
+        
+        # for sel in draft_input.data["suggestion_selection"]:
+        #     for file in suggestion_instances.filter(source=sel):
+        #         user_files.append((file.link, file.data_type))
+        for user_input in source_input_list:
+            for file in draft_input.data[user_input]:
+                user_files.append((file, user_input))
+        project.selected_suggestion = "|".join(draft_input.data["suggestion_selection"])
+        project.save()
+
+        new_draft = Draft(project=project, status=1)
+        new_draft.save()
+
+        write_first_draft.delay(
+            project_id=project_id,
+            draft_id=new_draft.id,
+            user_files=user_files,
+        )
+        # draft_input.data["web_pages"]
+        return JsonResponse(
+            {
+                "message": "suggestion generation started",
+                "draft_id": new_draft.id,
+            }
+        )
 
 
 class DraftView(APIView):
@@ -166,17 +225,58 @@ class SingleDraftView(APIView):
 
 
 class SuggestionQueueView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Suggestion 생성 완료 확인",
+        tags=["Project"],
+        responses={200: SuggestionResponseSz()},
+    )
     def get(self, request, project_id):
         """
         Suggestion 생성이 완료되었는지 확인하는 엔드포인트
         생성이 완료되었다면 아래 예시와 같은 응답
         생성중이라면 {"status": "WAIT"}의 응답이 갑니다.
+        생성중 응답이 반환됐다면 생성완료 응답이 올 때 까지 1초마다 계속 같은 요청 보내시면 됩니다.
+        생성완료는 {"status": "COMPLETE"}가 응답에 포함됩니다.
         """
         project = Project.objects.get(id=project_id)
+        source_list = ["kostat", "youtube", "google", "naver"]
         if project.suggestion_flag == True:
             suggestions = DataSourceSuggestion.objects.filter(project=project)
-            suggestion_sz = SuggestionResponseSz(
-                suggestions, data={"status": "COMPLETE"}, many=True
-            )
-            return JsonResponse(suggestion_sz.data, safe=False)
+            sz_data = {"status": "COMPLETE"}
+            for source in source_list:
+                sz_data[source] = SuggestionInstanceSz(
+                    suggestions.filter(source=source), many=True
+                ).data
+            print(sz_data)
+            suggestion_sz = SuggestionResponseSz(data=sz_data)
+            suggestion_sz.is_valid()
+            return JsonResponse(suggestion_sz.data, json_dumps_params={"ensure_ascii": False})
         return JsonResponse({"status": "WAIT"})
+
+
+class DraftQueueView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Draft 생성 완료 확인",
+        tags=["Draft"],
+        responses={200: DraftContextSz()},
+    )
+    def get(self, request, draft_id):
+        """
+        Draft 생성이 완료되었는지 확인하는 엔드포인트
+        생성이 완료되었다면 아래 예시와 같은 응답
+        생성중이라면 {"status": "WAIT"}의 응답이 갑니다.
+        생성중 응답이 반환됐다면 생성완료 응답이 올 때 까지 1초마다 계속 같은 요청 보내시면 됩니다.
+        생성완료는 {"status": "COMPLETE"}가 응답에 포함됩니다.
+        """
+        draft = Draft.objects.get(id=draft_id)
+        if draft.status == 0:
+            return JsonResponse({"status": "NOT STARTED"})
+        if draft.status == 1:
+            return JsonResponse({"status": "WAIT"})
+        draft_sz = DraftContextSz(draft)
+        return JsonResponse(
+            {
+                "status": "COMPLETE",
+                **draft_sz.data,
+            }
+        )

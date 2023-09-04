@@ -12,3 +12,9 @@ class DraftListSz(sz.ModelSerializer):
     class Meta:
         model = Draft
         fields = ["id", "name", "timestamp"]
+
+
+class DraftContextSz(sz.ModelSerializer):
+    class Meta:
+        model = Draft
+        fields = ["id", "name", "draft"]
