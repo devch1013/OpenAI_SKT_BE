@@ -1,0 +1,8 @@
+secrets.json
+main/database.py
+**/__pycache__
+**/migrations
+main/config/keys
+db
+user
+project_instances
