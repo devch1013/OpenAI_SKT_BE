@@ -1,9 +1,0 @@
-secrets.json
-main/database.py
-**/__pycache__
-**/migrations
-<<<<<<< HEAD
-main/config/keys
-=======
-main/config
->>>>>>> 1b9d4b6c3ef237996ef5a7a677e126ebed4f435e
