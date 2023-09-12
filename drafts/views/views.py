@@ -2,12 +2,12 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from django.http import JsonResponse
 from main.responses.success_responses import SuccessResponse
-from .models import *
-from .serializers.project_sz import *
-from .serializers.draft_sz import *
-from .serializers.response_sz import *
-from .tasks import get_suggestion, write_first_draft
-from .apps import DraftsConfig
+from ..models import *
+from ..serializers.project_sz import *
+from ..serializers.draft_sz import *
+from ..serializers.response_sz import *
+from ..tasks import get_suggestion, write_first_draft
+from ..apps import DraftsConfig
 from writer.openai_skt.modules import Project as ProjectAi
 from drf_yasg.utils import swagger_auto_schema
 import pickle

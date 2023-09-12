@@ -1,8 +1,10 @@
 from django.urls import path, include
-from .views import *
+from .views.views import *
+from .views.qna_views import *
 
 urlpatterns = [
     path("", Projects.as_view()),
+    path("<int:project_id>/qna", QnAViews.as_view()),
     path("<int:project_id>/recent", RecentDraft.as_view()),
     path("<int:project_id>/table", TableView.as_view()),
     path("<int:project_id>/suggestion/queue", SuggestionQueueView.as_view()),

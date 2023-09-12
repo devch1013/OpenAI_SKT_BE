@@ -59,7 +59,7 @@ CELERY_BROKER_URL = "pyamqp://guest@192.168.0.70//"
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["10.10.10.12"]
+ALLOWED_HOSTS = ["10.10.10.12","chat-profile.audrey.kr"]
 CSRF_TRUSTED_ORIGINS = ["https://chat-profile.audrey.kr"]
 
 SOCIAL_AUTH_GOOGLE_SECRET = secrets.get("SOCIAL_AUTH_GOOGLE_SECRET")

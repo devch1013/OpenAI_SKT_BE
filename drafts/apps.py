@@ -6,6 +6,7 @@ from writer.openai_skt.models.table_generator import TableGeneratorInstance
 from writer.openai_skt.models.qna_assistant import QnAInstance
 from writer.openai_skt.tools.search_tool import SearchTool, SearchByURLTool
 from writer.openai_skt.tools.database_tool import DatabaseTool
+from writer.openai_skt.database import CustomEmbedChain
 
 
 class DraftsConfig(AppConfig):
@@ -37,6 +38,7 @@ class DraftsConfig(AppConfig):
         input_variables=["purpose", "draft", "database", "single_table", "table"],
         draft_template=draft_template,
     )
+    embedchain = CustomEmbedChain()
     search_by_url_tool = SearchByURLTool()
     search_tool = SearchTool(
         search_by_url_tool=search_by_url_tool,
@@ -47,6 +49,7 @@ class DraftsConfig(AppConfig):
         input_variables=["document", "question"],
         summary_chunk_template=unified_summary_chunk_template,
     )
+    
 
     table_generator_instance = TableGeneratorInstance(table_chain=table_chain)
     keywords_generator_instance = KeywordsGeneratorInstance(keywords_chain=keywords_chain)
@@ -56,6 +59,8 @@ class DraftsConfig(AppConfig):
         search_tool=search_tool,
         database_tool=database_tool,
         qna_prompt_path="writer/openai_skt/models/templates/qna_prompt_template.txt",
+        summary_chunk_template=unified_summary_chunk_template,
+        input_variables=["document", "question"],
     )
 
     instances = {
@@ -64,4 +69,5 @@ class DraftsConfig(AppConfig):
         "draft_generator_instance": draft_generator_instance,
         "qna_instance": qna_instance,
         "search_tool": search_tool,
+        "embed_chain": embedchain,
     }

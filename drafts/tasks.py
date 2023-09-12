@@ -46,20 +46,37 @@ async def async_suggestion_task(project_instance, purpose, table):
         "naver_search": "naver",
         "gallup": "gallup",
     }
-    for api_type, infos in files.items():
-        for info in infos:
-            try:
-                print(info)
-                suggestion = DataSourceSuggestion()
-                suggestion.project = project_instance
-                suggestion.title = info["title"]
-                suggestion.source = source_template[api_type]
-                suggestion.description = info["description"]
-                suggestion.data_type = info["data_type"]
-                suggestion.link = info["data_path"]
-                await database_sync_to_async(suggestion.save)()
-            except Exception as e:
-                print(e)
+    # for api_type, infos in files.items():
+    #     for info in infos:
+    #         try:
+    #             print(info)
+    #             suggestion = DataSourceSuggestion()
+    #             suggestion.project = project_instance
+    #             suggestion.title = info["title"]
+    #             suggestion.source = source_template[api_type]
+    #             suggestion.description = info["description"]
+    #             suggestion.data_type = info["data_type"]
+    #             suggestion.link = info["data_path"]
+    #             await database_sync_to_async(suggestion.save)()
+    #         except Exception as e:
+    #             print(e)
+                
+    for keyword, infos in files.items():
+        for api_type, info in infos.items():
+            for data in info:
+                try:
+                    # print(data)
+                    suggestion = DataSourceSuggestion()
+                    suggestion.project = project_instance
+                    suggestion.title = data["title"]
+                    suggestion.source = source_template[api_type]
+                    suggestion.description = data["description"]
+                    suggestion.data_type = data["data_type"]
+                    suggestion.link = data["data_path"]
+                    suggestion.keyword = keyword
+                    await database_sync_to_async(suggestion.save)()
+                except Exception as e:
+                    print(e)
     project_instance.keywords = "|".join(keywords)
     await database_sync_to_async(project_instance.save)()
     # print(files)
@@ -74,12 +91,16 @@ def write_first_draft(project_id, draft_id, user_files):
     suggestion_file_dict = dict()
     for sel in project_instance.selected_suggestion.split("|"):
         si = suggestion_instances.get(id=int(sel))
+        if si.keyword not in suggestion_file_dict.keys():
+            suggestion_file_dict[si.keyword] = dict()
         # suggestion_file_dict[sel] = list()
         # for file in suggestion_instances.filter(source=sel):
-        if si.source in suggestion_file_dict.keys():
-            suggestion_file_dict[si.source].append({"data_path": si.link, "data_type": si.data_type})
+        if si.source in suggestion_file_dict[si.keyword].keys():
+            suggestion_file_dict[si.keyword][si.source].append(
+                {"data_path": si.link, "data_type": si.data_type}
+            )
         else:
-            suggestion_file_dict[si.source]=[{"data_path": si.link, "data_type": si.data_type}]
+            suggestion_file_dict[si.keyword][si.source] = [{"data_path": si.link, "data_type": si.data_type}]
     print(suggestion_file_dict)
     project = ProjectAi.load(
         project_id=project_id,
@@ -89,11 +110,11 @@ def write_first_draft(project_id, draft_id, user_files):
         keywords=project_instance.keywords.split("|"),
         files=suggestion_file_dict,
     )
-    
+
     project.add_files(user_files)
     database = project.parse_files_to_embedchain()
     draft = project.get_draft()
-    project.save_instance()
+    project.save()
 
     draft_instance = Draft.objects.get(id=draft_id)
     draft_instance.table = project_instance.table
@@ -102,8 +123,6 @@ def write_first_draft(project_id, draft_id, user_files):
     draft_instance.name = "Draft 1"
     draft_instance.save()
     print(draft)
-    
-    
 
 
 async def aaa():

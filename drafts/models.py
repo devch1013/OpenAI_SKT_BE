@@ -7,8 +7,8 @@ from users.models import User
 class Project(models.Model):
     id = models.AutoField(primary_key=True)
     suggestion_flag = models.BooleanField(default=False)
-    selected_suggestion = models.CharField(max_length=100, blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING)
+    selected_suggestion = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     project_name = models.CharField(max_length=200)
     purpose = models.TextField(blank=True, null=True)
     table = models.TextField(blank=True, null=True)
@@ -24,6 +24,7 @@ class DataSourceSuggestion(models.Model):
     description = models.TextField(null=True, blank=True)
     # icon = models.CharField(max_length=300, null=True, blank=True)
     link = models.TextField(null=True, blank=True)
+    keyword = models.CharField(max_length= 50, blank=True, null=True)
 
 
 class DataSource(models.Model):
@@ -53,11 +54,14 @@ class AiDraftModification(models.Model):
 
 
 class Conversation(models.Model):
+    
     id = models.AutoField(primary_key=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     last_modified = models.DateTimeField(auto_now=True)
     length = models.IntegerField(default=0)
-    stage_history = models.CharField(max_length=200, default="")
+    # stage_history = models.CharField(max_length=200, default="")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    deleted = models.BooleanField(default=False)
 
 
 class Utterance(models.Model):
@@ -68,4 +72,4 @@ class Utterance(models.Model):
     time_to_response = models.IntegerField(default=0)
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE)
     # text = models.TextField(max_length=500)  ## 발화내용
-    stage = models.IntegerField(blank=True, null=True)
+    # stage = models.IntegerField(blank=True, null=True)
