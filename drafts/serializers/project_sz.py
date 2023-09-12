@@ -5,7 +5,7 @@ from ..models import *
 class ProjectNameListSz(sz.ModelSerializer):
     class Meta:
         model = Project
-        fields = ["id", "project_name"]
+        fields = ["id", "project_name", "purpose"]
 
 
 class ProjectSaveSz(sz.ModelSerializer):

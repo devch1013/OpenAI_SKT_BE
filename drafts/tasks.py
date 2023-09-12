@@ -89,12 +89,14 @@ def write_first_draft(project_id, draft_id, user_files):
         keywords=project_instance.keywords.split("|"),
         files=suggestion_file_dict,
     )
+    
     project.add_files(user_files)
     database = project.parse_files_to_embedchain()
     draft = project.get_draft()
     project.save_instance()
 
     draft_instance = Draft.objects.get(id=draft_id)
+    draft_instance.table = project_instance.table
     draft_instance.draft = draft
     draft_instance.status = 2
     draft_instance.name = "Draft 1"

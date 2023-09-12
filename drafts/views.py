@@ -130,10 +130,44 @@ class TableView(APIView):
         """
         ...
 
+    def get(self, project_id):
+        ...
+
+
+source_input_list = ["web_pages", "files", "text", "image", "youtube"]
+
 
 class DataSourceView(APIView):
     def get(self, request, project_id):
-        ...
+        project = Project.objects.get(id = project_id)
+        sources = DataSource.objects.filter(project=project)
+        if project.selected_suggestion == None:
+            selected_suggestion_id_list = []
+        else:
+            selected_suggestion_id_list = list(map(int,project.selected_suggestion.split("|")))
+        suggestion = DataSourceSuggestion.objects.filter(id__in = selected_suggestion_id_list)
+        response_dict = dict()
+        response_dict["suggestion"] = list()
+        for sug in suggestion:
+            response_dict["suggestion"].append({
+                "source": sug.source,
+                "title": sug.title,
+                "description": sug.description,
+                "link": sug.link,
+                
+            })
+            
+        for source_name in source_input_list:
+            response_dict[source_name] = list()
+            source_instances = sources.filter(data_type=source_name)
+            for source_inst in source_instances:
+                response_dict[source_name].append(
+                    {
+                        "id": source_inst.id,
+                        "source": source_inst.data,
+                    }
+                )
+        return JsonResponse(response_dict)
 
     def put(self, request, project_id):
         """
@@ -160,15 +194,18 @@ class FirstDraftView(APIView):
         """
         project = Project.objects.get(id=project_id)
         user_files = list()
-        source_input_list = ["web_pages", "files", "text", "image", "youtube"]
+
         draft_input = CreateFirstDraftSz(data=request.data)
         draft_input.is_valid(raise_exception=True)
-        
+
         # for sel in draft_input.data["suggestion_selection"]:
         #     for file in suggestion_instances.filter(source=sel):
         #         user_files.append((file.link, file.data_type))
+
         for user_input in source_input_list:
             for file in draft_input.data[user_input]:
+                new_source = DataSource(data_type=user_input, data=file, project=project)
+                new_source.save()
                 user_files.append((file, user_input))
         project.selected_suggestion = "|".join(draft_input.data["suggestion_selection"])
         project.save()
@@ -206,10 +243,32 @@ class DraftView(APIView):
         ...
 
 
+import json
+
+
 class SingleDraftView(APIView):
     def get(self, request, draft_id):
-
-        ...
+        draft = Draft.objects.get(id=draft_id)
+        response_dict = dict()
+        response_dict["draft"] = draft.draft
+        with open(f"user/{draft.project.id}/user_instance.json", "r") as user_instance:
+            user_instance = json.load(user_instance)
+        response_dict["table"] = user_instance["draft"][0]["tables"]
+        draft_part = user_instance["draft"][0]["draft_parts"]
+        response_dict["source"] = list()
+        for part in draft_part:
+            sources = part["files"]
+            for source in sources:
+                del source["id"]
+                del source["token_num"]
+            response_dict["source"].append(
+                {
+                    "single_table": part["single_table"],
+                    "sources": sources,
+                }
+            )
+        # print(user_instance)
+        return JsonResponse(response_dict)
 
     def post(self, request, draft_id):
         """
@@ -239,7 +298,7 @@ class SuggestionQueueView(APIView):
         생성완료는 {"status": "COMPLETE"}가 응답에 포함됩니다.
         """
         project = Project.objects.get(id=project_id)
-        source_list = ["kostat", "youtube", "google", "naver","gallup"]
+        source_list = ["kostat", "youtube", "google", "naver", "gallup"]
         if project.suggestion_flag == True:
             suggestions = DataSourceSuggestion.objects.filter(project=project)
             sz_data = {"status": "COMPLETE"}

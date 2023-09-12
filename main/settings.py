@@ -21,6 +21,7 @@ import configparser
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append("writer/openai_skt")
+
 auth_secret_file = os.path.join(BASE_DIR, "main/config/keys/secrets.json")
 ai_secret_file = os.path.join(BASE_DIR, "main/config/keys/ai_keys.ini")
 # Quick-start development settings - unsuitable for production
