@@ -24,11 +24,11 @@ class RecentDraft(APIView):
         recent_draft = draft[0]
         draft_sz = DraftGetSz(recent_draft)
         return JsonResponse(draft_sz.data)
-    
-    
-    
+
 
 source_input_list = ["web_pages", "files", "text", "image", "youtube"]
+
+
 class FirstDraftView(APIView):
     @swagger_auto_schema(
         operation_summary="Data source 추가 후 첫 draft 생성",
@@ -78,49 +78,9 @@ class FirstDraftView(APIView):
                 "draft_id": new_draft.id,
             }
         )
-        
-        
-class DataSourceView(APIView):
-    def get(self, request, project_id):
-        project = Project.objects.get(id = project_id)
-        sources = DataSource.objects.filter(project=project)
-        if project.selected_suggestion == None:
-            selected_suggestion_id_list = []
-        else:
-            selected_suggestion_id_list = list(map(int,project.selected_suggestion.split("|")))
-        suggestion = DataSourceSuggestion.objects.filter(id__in = selected_suggestion_id_list)
-        response_dict = dict()
-        response_dict["suggestion"] = list()
-        for sug in suggestion:
-            response_dict["suggestion"].append({
-                "source": sug.source,
-                "title": sug.title,
-                "description": sug.description,
-                "link": sug.link,
-                
-            })
-            
-        for source_name in source_input_list:
-            response_dict[source_name] = list()
-            source_instances = sources.filter(data_type=source_name)
-            for source_inst in source_instances:
-                response_dict[source_name].append(
-                    {
-                        "id": source_inst.id,
-                        "source": source_inst.data,
-                    }
-                )
-        return JsonResponse(response_dict)
 
-    def put(self, request, project_id):
-        """
-        수정
-        """
-        ...
-        
-        
 
-class DraftTestView(APIView):
+class DraftStreamingView(APIView):
     def post(self, request, project_id):
         project = Project.objects.get(id=project_id)
         user_files = list()
@@ -144,7 +104,7 @@ class DraftTestView(APIView):
         new_draft.save()
 
         project_instance = Project.objects.get(id=project_id)
-        draft_id=new_draft.id
+        draft_id = new_draft.id
         suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
         suggestion_file_dict = dict()
         for sel in project_instance.selected_suggestion.split("|"):
@@ -158,7 +118,9 @@ class DraftTestView(APIView):
                     {"data_path": si.link, "data_type": si.data_type}
                 )
             else:
-                suggestion_file_dict[si.keyword][si.source] = [{"data_path": si.link, "data_type": si.data_type}]
+                suggestion_file_dict[si.keyword][si.source] = [
+                    {"data_path": si.link, "data_type": si.data_type}
+                ]
         print(suggestion_file_dict)
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
@@ -168,36 +130,8 @@ class DraftTestView(APIView):
         project.add_files(user_files)
         database = project.parse_files_to_embedchain()
         # draft = project.get_draft(draft_id=draft_id)
-        
-        def get_draft_stream(project):
-            streaming_queue = StreamingQueue()
-            content = ""
-            def chat_task():
-                project.get_draft(draft_id=draft_id, queue=streaming_queue)
-                # project.get_qna_answer(
-                #     question=question,
-                #     qna_history=qna_history,
-                #     queue=streaming_queue,
-                # )
-                streaming_queue.end_job()
 
-            start = time()
-            t = threading.Thread(target=chat_task)
-            t.start()
-            while True:
-                if streaming_queue.is_end():
-                    print("streaming is ended")
-                    break
-                ## 4개
-                if not streaming_queue.is_empty():
-                    next_token = streaming_queue.get()
-                    content += next_token
-                    print(next_token)
-                    yield next_token
-                    
-            print(content)
-                    
-        result = get_draft_stream(project)
+        result = get_draft_stream(project, draft_id)
         # project.save()
 
         # draft_instance = Draft.objects.get(id=draft_id)
@@ -211,6 +145,37 @@ class DraftTestView(APIView):
         response = StreamingHttpResponse(result, status=200, content_type="text/event-stream")
         return response
 
+
+def get_draft_stream(project, draft_id):
+    streaming_queue = StreamingQueue()
+    content = ""
+
+    def chat_task():
+        project.get_draft(draft_id=draft_id, queue=streaming_queue)
+        # project.get_qna_answer(
+        #     question=question,
+        #     qna_history=qna_history,
+        #     queue=streaming_queue,
+        # )
+        streaming_queue.end_job()
+
+    start = time()
+    t = threading.Thread(target=chat_task)
+    t.start()
+    while True:
+        if streaming_queue.is_end():
+            print("streaming is ended")
+            break
+        ## 4개
+        if not streaming_queue.is_empty():
+            next_token = streaming_queue.get()
+            content += next_token
+            # print(next_token)
+            yield next_token
+
+    print(content)
+
+
 class DraftView(APIView):
     def get(self, request, project_id):
         """
@@ -220,11 +185,42 @@ class DraftView(APIView):
         draft_sz = DraftListSz(draft, many=True)
         return JsonResponse(draft_sz.data, safe=False)
 
+    @swagger_auto_schema(
+        operation_summary="draft 생성",
+        tags=["Draft"],
+    )
     def post(self, request, project_id):
         """
-        첫 draft 생성
+        draft 생성
         """
-        ...
+        project_instance = Project.objects.get(id=project_id)
+        user_files = list()
+
+        datasources = DataSource.objects.filter(project=project_instance)
+        for datasource in datasources:
+            user_files.append((datasource.data, datasource.data_type))
+
+        new_draft = Draft(project=project, status=1)
+        new_draft.save()
+        draft_id = new_draft.id
+
+        suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
+        for sel in project_instance.selected_suggestion.split("|"):
+            si = suggestion_instances.get(id=int(sel))
+            user_files.append((si.link, si.data_type))
+
+        project = ProjectAi.load_from_file(
+            **(DraftsConfig.instances),
+            user_instance_path=f"user/{project.id}/user_instance.json",
+        )
+
+        project.add_files(user_files)
+        database = project.parse_files_to_embedchain()
+
+        result = get_draft_stream(project, draft_id)
+
+        response = StreamingHttpResponse(result, status=200, content_type="text/event-stream")
+        return response
 
 
 import json
@@ -265,8 +261,8 @@ class SingleDraftView(APIView):
         단순 텍스트 수정
         """
         ...
-        
-        
+
+
 class DraftQueueView(APIView):
     @swagger_auto_schema(
         operation_summary="Draft 생성 완료 확인",

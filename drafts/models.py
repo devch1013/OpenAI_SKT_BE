@@ -32,6 +32,7 @@ class DataSource(models.Model):
     data_type = models.CharField(max_length=10)
     data = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
+    filename = models.TextField(blank=True, null=True)
 
 
 class Draft(models.Model):
