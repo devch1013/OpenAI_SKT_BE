@@ -113,7 +113,7 @@ def write_first_draft(project_id, draft_id, user_files):
 
     project.add_files(user_files)
     database = project.parse_files_to_embedchain()
-    draft = project.get_draft()
+    draft = project.get_draft(draft_id=draft_id)
     project.save()
 
     draft_instance = Draft.objects.get(id=draft_id)
