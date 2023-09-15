@@ -19,6 +19,10 @@ from ..utils.streaming_queue import StreamingQueue
 
 
 class RecentDraft(APIView):
+    @swagger_auto_schema(
+        operation_summary="가장 최근 드래프트",
+        deprecated=True,
+    )
     def get(self, request, project_id):
         draft = Draft.objects.filter(project__id=project_id).order_by("-timestamp")
         recent_draft = draft[0]
@@ -29,126 +33,128 @@ class RecentDraft(APIView):
 source_input_list = ["web_pages", "files", "text", "image", "youtube"]
 
 
-class FirstDraftView(APIView):
-    @swagger_auto_schema(
-        operation_summary="Data source 추가 후 첫 draft 생성",
-        tags=["Draft"],
-        request_body=CreateFirstDraftSz(),
-        responses={200: DraftResponseSz()},
-    )
-    def post(self, request, project_id):
-        """
-        첫 데이터 소스 업데이트 후 draft 생성
-        유저가 고른 suggestion의 id 번호를 int 타입으로 리스트 형태로 주시면 됩니다.
-        유저가 추가한 source의 경우는 body 예시를 보시고 각 카테고리에 맞는 데이터를 리스트 형태로 넣어주세요.
-        Suggestion 생성과 마찬가지로 시간이 소요되기 때문에 비동기로 처리됩니다.
-        요청이 정상적으로 처리되었을 경우 바로 200 응답이 반환됩니다.
-        결과는 반환되는 draft_id로 "Draft 생성 완료 확인" API를 참고하시면 됩니다.
-        """
-        project = Project.objects.get(id=project_id)
-        user_files = list()
+# class FirstDraftView(APIView):
+#     @swagger_auto_schema(
+#         operation_summary="Data source 추가 후 첫 draft 생성",
+#         tags=["Draft"],
+#         request_body=CreateFirstDraftSz(),
+#         responses={200: DraftResponseSz()},
+#     )
+#     def post(self, request, project_id):
+#         """
+#         첫 데이터 소스 업데이트 후 draft 생성
+#         유저가 고른 suggestion의 id 번호를 int 타입으로 리스트 형태로 주시면 됩니다.
+#         유저가 추가한 source의 경우는 body 예시를 보시고 각 카테고리에 맞는 데이터를 리스트 형태로 넣어주세요.
+#         Suggestion 생성과 마찬가지로 시간이 소요되기 때문에 비동기로 처리됩니다.
+#         요청이 정상적으로 처리되었을 경우 바로 200 응답이 반환됩니다.
+#         결과는 반환되는 draft_id로 "Draft 생성 완료 확인" API를 참고하시면 됩니다.
+#         """
+#         project = Project.objects.get(id=project_id)
+#         user_files = list()
 
-        draft_input = CreateFirstDraftSz(data=request.data)
-        draft_input.is_valid(raise_exception=True)
+#         draft_input = CreateFirstDraftSz(data=request.data)
+#         draft_input.is_valid(raise_exception=True)
 
-        # for sel in draft_input.data["suggestion_selection"]:
-        #     for file in suggestion_instances.filter(source=sel):
-        #         user_files.append((file.link, file.data_type))
+#         # for sel in draft_input.data["suggestion_selection"]:
+#         #     for file in suggestion_instances.filter(source=sel):
+#         #         user_files.append((file.link, file.data_type))
 
-        for user_input in source_input_list:
-            for file in draft_input.data[user_input]:
-                new_source = DataSource(data_type=user_input, data=file, project=project)
-                new_source.save()
-                user_files.append((file, user_input))
-        project.selected_suggestion = "|".join(draft_input.data["suggestion_selection"])
-        project.save()
+#         for user_input in source_input_list:
+#             for file in draft_input.data[user_input]:
+#                 new_source = DataSource(data_type=user_input, data=file, project=project)
+#                 new_source.save()
+#                 user_files.append((file, user_input))
+#         project.selected_suggestion = "|".join(draft_input.data["suggestion_selection"])
+#         project.save()
 
-        new_draft = Draft(project=project, status=1)
-        new_draft.save()
+#         new_draft = Draft(project=project, status=1)
+#         new_draft.save()
 
-        write_first_draft.delay(
-            project_id=project_id,
-            draft_id=new_draft.id,
-            user_files=user_files,
-        )
-        # draft_input.data["web_pages"]
-        return JsonResponse(
-            {
-                "message": "suggestion generation started",
-                "draft_id": new_draft.id,
-            }
-        )
-
-
-class DraftStreamingView(APIView):
-    def post(self, request, project_id):
-        project = Project.objects.get(id=project_id)
-        user_files = list()
-
-        draft_input = CreateFirstDraftSz(data=request.data)
-        draft_input.is_valid(raise_exception=True)
-
-        # for sel in draft_input.data["suggestion_selection"]:
-        #     for file in suggestion_instances.filter(source=sel):
-        #         user_files.append((file.link, file.data_type))
-
-        for user_input in source_input_list:
-            for file in draft_input.data[user_input]:
-                new_source = DataSource(data_type=user_input, data=file, project=project)
-                new_source.save()
-                user_files.append((file, user_input))
-        project.selected_suggestion = "|".join(draft_input.data["suggestion_selection"])
-        project.save()
-
-        new_draft = Draft(project=project, status=1)
-        new_draft.save()
-
-        project_instance = Project.objects.get(id=project_id)
-        draft_id = new_draft.id
-        suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
-        suggestion_file_dict = dict()
-        for sel in project_instance.selected_suggestion.split("|"):
-            si = suggestion_instances.get(id=int(sel))
-            if si.keyword not in suggestion_file_dict.keys():
-                suggestion_file_dict[si.keyword] = dict()
-            # suggestion_file_dict[sel] = list()
-            # for file in suggestion_instances.filter(source=sel):
-            if si.source in suggestion_file_dict[si.keyword].keys():
-                suggestion_file_dict[si.keyword][si.source].append(
-                    {"data_path": si.link, "data_type": si.data_type}
-                )
-            else:
-                suggestion_file_dict[si.keyword][si.source] = [
-                    {"data_path": si.link, "data_type": si.data_type}
-                ]
-        print(suggestion_file_dict)
-        project = ProjectAi.load_from_file(
-            **(DraftsConfig.instances),
-            user_instance_path=f"user/{project.id}/user_instance.json",
-        )
-
-        project.add_files(user_files)
-        database = project.parse_files_to_embedchain()
-        # draft = project.get_draft(draft_id=draft_id)
-
-        result = get_draft_stream(project, draft_id)
-        # project.save()
-
-        # draft_instance = Draft.objects.get(id=draft_id)
-        # draft_instance.table = project_instance.table
-        # draft_instance.draft = draft
-        # draft_instance.status = 2
-        # draft_instance.name = "Draft 1"
-        # draft_instance.save()
-        # print(content)
-        # draft_input.data["web_pages"]
-        response = StreamingHttpResponse(result, status=200, content_type="text/event-stream")
-        return response
+#         write_first_draft.delay(
+#             project_id=project_id,
+#             draft_id=new_draft.id,
+#             user_files=user_files,
+#         )
+#         # draft_input.data["web_pages"]
+#         return JsonResponse(
+#             {
+#                 "message": "suggestion generation started",
+#                 "draft_id": new_draft.id,
+#             }
+#         )
 
 
-def get_draft_stream(project, draft_id):
+# class DraftStreamingView(APIView):
+#     def post(self, request, project_id):
+#         project = Project.objects.get(id=project_id)
+#         user_files = list()
+
+#         draft_input = CreateFirstDraftSz(data=request.data)
+#         draft_input.is_valid(raise_exception=True)
+
+#         # for sel in draft_input.data["suggestion_selection"]:
+#         #     for file in suggestion_instances.filter(source=sel):
+#         #         user_files.append((file.link, file.data_type))
+
+#         for user_input in source_input_list:
+#             for file in draft_input.data[user_input]:
+#                 new_source = DataSource(data_type=user_input, data=file, project=project)
+#                 new_source.save()
+#                 user_files.append((file, user_input))
+#         project.selected_suggestion = "|".join(list(map(str,draft_input.data["suggestion_selection"])))
+#         project.save()
+
+#         new_draft = Draft(project=project, status=1, table = project.table)
+#         new_draft.save()
+
+#         project_instance = Project.objects.get(id=project_id)
+#         draft_id = new_draft.id
+#         suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
+#         suggestion_file_dict = dict()
+#         for sel in project_instance.selected_suggestion.split("|"):
+#             si = suggestion_instances.get(id=int(sel))
+#             if si.keyword not in suggestion_file_dict.keys():
+#                 suggestion_file_dict[si.keyword] = dict()
+#             # suggestion_file_dict[sel] = list()
+#             # for file in suggestion_instances.filter(source=sel):
+#             if si.source in suggestion_file_dict[si.keyword].keys():
+#                 suggestion_file_dict[si.keyword][si.source].append(
+#                     {"data_path": si.link, "data_type": si.data_type}
+#                 )
+#             else:
+#                 suggestion_file_dict[si.keyword][si.source] = [
+#                     {"data_path": si.link, "data_type": si.data_type}
+#                 ]
+#         print(suggestion_file_dict)
+#         project = ProjectAi.load_from_file(
+#             **(DraftsConfig.instances),
+#             user_instance_path=f"audrey_files/project/{project.id}/user_instance.json",
+#         )
+
+#         project.add_files(user_files)
+#         database = project.parse_files_to_embedchain()
+#         # draft = project.get_draft(draft_id=draft_id)
+
+#         result = get_draft_stream(project, draft_id, new_draft)
+#         # project.save()
+
+#         # draft_instance = Draft.objects.get(id=draft_id)
+#         # draft_instance.table = project_instance.table
+#         # draft_instance.draft = draft
+#         # draft_instance.status = 2
+#         # draft_instance.name = "Draft 1"
+#         # draft_instance.save()
+#         # print(content)
+#         # draft_input.data["web_pages"]
+#         response = StreamingHttpResponse(result, status=200, content_type="text/event-stream")
+#         return response
+
+
+def get_draft_stream(project: ProjectAi, draft_id: int, new_draft: Draft):
     streaming_queue = StreamingQueue()
     content = ""
+
+    # yield f"###{draft_id}###"
 
     def chat_task():
         project.get_draft(draft_id=draft_id, queue=streaming_queue)
@@ -170,8 +176,12 @@ def get_draft_stream(project, draft_id):
         if not streaming_queue.is_empty():
             next_token = streaming_queue.get()
             content += next_token
-            # print(next_token)
             yield next_token
+
+    project.save()
+    new_draft.draft = content
+    new_draft.status = 2
+    new_draft.save()
 
     print(content)
 
@@ -200,7 +210,7 @@ class DraftView(APIView):
         for datasource in datasources:
             user_files.append((datasource.data, datasource.data_type))
 
-        new_draft = Draft(project=project, status=1)
+        new_draft = Draft(project=project_instance, status=1, table=project_instance.table)
         new_draft.save()
         draft_id = new_draft.id
 
@@ -211,13 +221,13 @@ class DraftView(APIView):
 
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
-            user_instance_path=f"user/{project.id}/user_instance.json",
+            user_instance_path=f"audrey_files/project/{project_instance.id}/user_instance.json",
         )
 
         project.add_files(user_files)
-        database = project.parse_files_to_embedchain()
+        project.parse_files_to_embedchain()
 
-        result = get_draft_stream(project, draft_id)
+        result = get_draft_stream(project, draft_id, new_draft)
 
         response = StreamingHttpResponse(result, status=200, content_type="text/event-stream")
         return response
@@ -231,10 +241,12 @@ class SingleDraftView(APIView):
         draft = Draft.objects.get(id=draft_id)
         response_dict = dict()
         response_dict["draft"] = draft.draft
-        with open(f"user/{draft.project.id}/user_instance.json", "r") as user_instance:
-            user_instance = json.load(user_instance)
-        response_dict["table"] = user_instance["tables"]
-        draft_part = user_instance["draft_parts"]
+        with open(
+            f"audrey_files/project/{draft.project.id}/drafts/draft_{draft.id}.json", "r"
+        ) as draft_file:
+            draft_file = json.load(draft_file)
+        response_dict["table"] = draft_file["tables"]
+        draft_part = draft_file["draft_parts"]
         response_dict["source"] = list()
         for part in draft_part:
             sources = part["files"]
@@ -250,17 +262,49 @@ class SingleDraftView(APIView):
         # print(user_instance)
         return JsonResponse(response_dict)
 
+    @swagger_auto_schema(
+        operation_summary="Draft Edit(with AI)",
+        tags=["Draft"],
+        request_body=DraftEditSz(),
+        responses={200: SuccessResponseSz()},
+    )
     def post(self, request, draft_id):
         """
-        draft와 ai 요청사항 반영해서 draft 생성
+        draft와 ai 요청사항 반영해서 draft 수정
         """
-        ...
+        draft_instance = Draft.objects.get(id=draft_id)
+        project_instance = draft_instance.project
+        edit_query = DraftEditSz(data=request.data)
+        edit_query.is_valid()
+        project = ProjectAi.load_from_file(
+            **(DraftsConfig.instances),
+            user_instance_path=f"audrey_files/project/{project_instance.id}/user_instance.json",
+        )
+        editted_draft = project.edit_draft(
+            edit_query.data.get("query"),
+            edit_query.data.get("draft_part"),
+        )
+        return JsonResponse({"draft": editted_draft})
 
+    @swagger_auto_schema(
+        operation_summary="Draft 단순 텍스트 수정",
+        tags=["Draft"],
+        request_body=DraftTextEditSz(),
+        responses={200: SuccessResponseSz()},
+    )
     def put(self, request, draft_id):
         """
         단순 텍스트 수정
         """
-        ...
+        draft = Draft.objects.get(id=draft_id)
+        fixed_draft = DraftTextEditSz(data=request.data)
+        fixed_draft.is_valid()
+        fixed_draft = fixed_draft.data.get("draft")
+
+        draft.draft = fixed_draft
+        draft.save()
+
+        return SuccessResponse()
 
 
 class DraftQueueView(APIView):

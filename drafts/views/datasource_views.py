@@ -13,6 +13,7 @@ from drf_yasg.utils import swagger_auto_schema
 from django.core.files.storage import FileSystemStorage
 from django.http import FileResponse
 import os
+import uuid
 # Create your views here.
 
 
@@ -61,7 +62,7 @@ class SuggestionView(APIView):
         project = Project.objects.get(id=project_id)
         selection = SuggestionSz(data=request.data)
         selection.is_valid(raise_exception=True)
-        project.selected_suggestion = "|".join(selection.data["suggestion_selection"])
+        project.selected_suggestion = "|".join(list(map(str,selection.data["suggestion_selection"])))
         project.save()
         
         return SuccessResponse()
@@ -135,7 +136,7 @@ class DataSourceView(APIView):
         return JsonResponse(response_dict)
     
     @swagger_auto_schema(
-        operation_summary="Datasource 추가(처음)",
+        operation_summary="Datasource 추가",
         tags=["DataSource"],
         request_body=DataSourceSz(),
         responses={200: SuccessResponseSz()},
@@ -150,35 +151,47 @@ class DataSourceView(APIView):
         for key, filelist in files.items():
             for file in filelist:
                 if key in file_keys:
+                    print(key, file.name)
                     ds_instance = DataSource(project = project)
                     ds_instance.save()
                     meme = file.name.split(".")[-1]
                     fs = FileSystemStorage(location=storage, base_url=storage)
                     # FileSystemStorage.save(file_name, file_content)
                     filename = fs.save(f"{ds_instance.id}.{meme}", file)
-                    ds_instance.data_type = key
+                    if meme == "pdf":
+                        ds_instance.data_type = "pdf_file"
+                    else:
+                        ds_instance.data_type = key
                     ds_instance.data = os.path.join(storage, filename)
                     ds_instance.filename = file.name
                     ds_instance.save()
         
         for user_input in source_list:
             for file in draft_input.data[user_input]:
+                print(user_input, file)
                 ds_instance = DataSource(data_type=user_input, data=file, project=project)
                 ds_instance.save()
+                
+        draft_id = str(uuid.uuid4())
         
-        return SuccessResponse( )
+        return JsonResponse({"id": draft_id})
     
     
-class FileView(APIView):
-    authentication_classes = []
-    def get(self, request, source_id):
-        datasource = DataSource.objects.get(id=source_id)
-        project_id = datasource.project.id
-        storage = f"audrey_files/source_files/{project_id}"
-        file_path = datasource.data
-        file_type = "application/octet-stream"  # django file object에 content type 속성이 없어서 따로 저장한 필드
-        fs = FileSystemStorage(storage)
-        response = FileResponse(fs.open(file_path.split("/")[-1], 'rb'), content_type=file_type)
-        response['Content-Disposition'] = f'attachment; filename={datasource.filename}'
+    @swagger_auto_schema(
+        operation_summary="Datasource 삭제",
+        tags=["DataSource"],
+        request_body=DataSourceDeleteSz(),
+        responses={200: SuccessResponseSz()},
+    )
+    def delete(self, request, project_id):
         
-        return response
+        project = Project.objects.get(id = project_id)
+        datasource_sz = DataSourceDeleteSz(data=request.data)
+        datasource_sz.is_valid(raise_exception=True)
+        
+        delete_list = datasource_sz.data.get("delete_id")
+        DataSource.objects.filter(project=project).filter(id__in = delete_list).delete()
+    
+        return SuccessResponse()
+    
+    

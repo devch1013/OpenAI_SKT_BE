@@ -41,6 +41,7 @@ class Draft(models.Model):
     table = models.TextField(blank=True, null=True)
     name = models.CharField(max_length=200, blank=True, null=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    uuid = models.CharField(max_length=30, blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     modified_time = models.DateTimeField(auto_now=True)
 

@@ -64,7 +64,7 @@ class QnAViews(APIView):
 
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
-            user_instance_path=f"user/{project_db.id}/user_instance.json",
+            user_instance_path=f"audrey_files/project/{project_db.id}/user_instance.json",
         )
 
         answer = qna_interceptor(

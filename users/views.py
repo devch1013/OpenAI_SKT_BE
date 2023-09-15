@@ -114,7 +114,7 @@ class Register(APIView):
             email=email,
             password=login_data["password"],
             username=email.split("@")[0],
-            user_profile_image="",
+            user_profile_image="https://chat-profile.audrey.kr/api/project/profile_image",
         )
 
         access_token, refresh_token = JWTAuthentication.create_jwt(user)

@@ -17,3 +17,6 @@ class DataSourceSz(sz.Serializer):
 #     text = sz.ListField(child=sz.CharField(), required=False, default=[])
 #     image = sz.ListField(child=sz.CharField(), required=False, default=[])
 #     youtube = sz.ListField(child=sz.CharField(), required=False, default=[])
+
+class DataSourceDeleteSz(sz.Serializer):
+    delete_id = sz.ListField(child=sz.IntegerField(), required=True)

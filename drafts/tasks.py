@@ -80,6 +80,7 @@ async def async_suggestion_task(project_instance, purpose, table):
     project_instance.keywords = "|".join(keywords)
     await database_sync_to_async(project_instance.save)()
     # print(files)
+    project.save()
     return files
 
 
