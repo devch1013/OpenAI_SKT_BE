@@ -14,6 +14,7 @@ from django.core.files.storage import FileSystemStorage
 from django.http import FileResponse
 import os
 import uuid
+import urllib
 
 
 
@@ -24,10 +25,18 @@ class DataSourceFileView(APIView):
         project_id = datasource.project.id
         storage = f"audrey_files/source_files/{project_id}"
         file_path = datasource.data
-        file_type = "application/octet-stream"  # django file object에 content type 속성이 없어서 따로 저장한 필드
+        if "pdf" in datasource.filename:
+            file_type = "application/pdf"  # django file object에 content type 속성이 없어서 따로 저장한 필드
+        elif "png" in datasource.filename:
+            file_type = "image/png"
+        else:
+            file_type = "application/octet-stream"
+        # filename = str(datasource.filename)
+        filename = urllib.parse.quote(datasource.filename.encode('utf-8'))
         fs = FileSystemStorage(storage)
         response = FileResponse(fs.open(file_path.split("/")[-1], 'rb'), content_type=file_type)
-        response['Content-Disposition'] = f'attachment; filename={datasource.filename}'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
         
         return response
     
@@ -40,6 +49,7 @@ class ProfileImageView(APIView):
         fs = FileSystemStorage(storage)
         filename = "base_profile.png"
         response = FileResponse(fs.open(filename, 'rb'), content_type=file_type)
-        # response['Content-Disposition'] = f'attachment; filename={filename}'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
         
         return response

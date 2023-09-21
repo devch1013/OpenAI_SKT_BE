@@ -20,3 +20,4 @@ class DataSourceSz(sz.Serializer):
 
 class DataSourceDeleteSz(sz.Serializer):
     delete_id = sz.ListField(child=sz.IntegerField(), required=True)
+    delete_suggestion_id = sz.ListField(child = sz.IntegerField() ,required=True)

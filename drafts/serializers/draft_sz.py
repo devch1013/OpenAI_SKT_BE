@@ -30,3 +30,24 @@ class DraftEditSz(sz.Serializer):
     # draft = sz.CharField()
     draft_part = sz.CharField()
     
+    
+    
+    
+############ For swagger
+
+class DataSourcesSz(sz.Serializer):
+    data = sz.CharField()
+    data_path = sz.CharField()
+    data_type = sz.CharField()
+    
+class DataSourceGetSz(sz.Serializer):
+    single_table = sz.CharField()
+    sources = DataSourcesSz(many=True)
+    
+class SingleDraftGetSz(sz.Serializer):
+    draft = sz.CharField()
+    table = sz.ListField(child = sz.CharField())
+    source = DataSourceGetSz(many=True)
+    
+    
+
