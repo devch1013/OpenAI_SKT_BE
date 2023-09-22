@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from rest_framework.views import APIView
 from django.http import JsonResponse
 from main.responses.success_responses import SuccessResponse
@@ -7,12 +6,10 @@ from ..models import *
 from ..serializers.project_sz import *
 from ..serializers.draft_sz import *
 from ..serializers.response_sz import *
-from ..tasks import get_suggestion, write_first_draft
 from ..apps import DraftsConfig
 from writer.openai_skt.modules import Project as ProjectAi
 from drf_yasg.utils import swagger_auto_schema
-import pickle
-from django.db.models import Q
+import os
 import threading
 from time import time
 from ..utils.streaming_queue import StreamingQueue
@@ -249,6 +246,32 @@ class SingleDraftView(APIView):
         draft.save()
 
         return SuccessResponse()
+
+from django.core.files.storage import FileSystemStorage
+from django.http import FileResponse
+class DraftDownloadView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Draft 다운로드",
+        tags=["Draft"],
+        responses={200: SuccessResponseSz()},
+    )
+    def get(self, request, draft_id):
+        """
+        get 요청하시면 바로 파일 다운로드 알아서 됨
+        """
+        draft = Draft.objects.get(id=draft_id)
+        prefix = f"audrey_files/project/{draft.project.id}/drafts"
+        font = "NanumMyeongjo"
+        os.system(f"pandoc {prefix}/draft_{draft_id}.md -o {prefix}/draft_{draft_id}.pdf --pdf-engine=xelatex --variable mainfont='{font}'")
+        
+        file_type = "application/pdf"  # django file object에 content type 속성이 없어서 따로 저장한 필드
+        fs = FileSystemStorage(prefix)
+        filename = f"draft_{draft_id}.pdf"
+        response = FileResponse(fs.open(filename, 'rb'), content_type=file_type)
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
+        return response
+        ...
 
 class RegenerateView(APIView):
     @swagger_auto_schema(

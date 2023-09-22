@@ -20,7 +20,11 @@ import configparser
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.append("writer/openai_skt")
+sys.path.insert(0,"writer/openai_skt")
+sys.path.append("writer/openai_skt/database/chunk/VipsPython/Vips")
+sys.path.append("writer/openai_skt/database/chunk/camelot")
+sys.path.append("writer/openai_skt/database/chunk/layout-parser")
+
 
 auth_secret_file = os.path.join(BASE_DIR, "main/config/keys/secrets.json")
 ai_secret_file = os.path.join(BASE_DIR, "main/config/keys/ai_keys.ini")

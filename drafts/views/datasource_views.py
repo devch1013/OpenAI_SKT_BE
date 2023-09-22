@@ -101,9 +101,11 @@ class SuggestionQueueView(APIView):
         return JsonResponse({"status": "WAIT"})
 
 
-source_input_list = ["web_pages", "files", "text", "images", "youtube", "pdf_file"]
+source_input_list = ["web_pages", "files", "text", "images", "youtube", "pdf_file", "audio"]
 source_list = ["web_pages", "text", "youtube"]
-file_keys = ["files", "images"]
+
+## 파일 받을때 key
+file_keys = ["files", "images","audio"]
 
 
 class DataSourceView(APIView):
@@ -136,7 +138,7 @@ class DataSourceView(APIView):
                 if source_name == "pdf_file":
                     source_name_temp = "files"
                 source = source_inst.data
-                if source_name_temp in ["files", "images"]:
+                if source_name_temp in ["files", "images", "audio"]:
                     source = f"https://chat-profile.audrey.kr/api/project/resource/{source_inst.id}"
                     response_dict[source_name_temp].append(
                         {
@@ -166,11 +168,11 @@ class DataSourceView(APIView):
         draft_input = DataSourceSz(data=request.data)
         draft_input.is_valid(raise_exception=True)
         files = dict(request.FILES)
+        print(files)
         storage = f"audrey_files/source_files/{project_id}"
         for key, filelist in files.items():
             for file in filelist:
                 if key in file_keys:
-                    print(key, file.name)
                     ds_instance = DataSource(project=project)
                     ds_instance.save()
                     meme = file.name.split(".")[-1]
