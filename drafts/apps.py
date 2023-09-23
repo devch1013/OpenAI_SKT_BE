@@ -1,12 +1,12 @@
 from django.apps import AppConfig
-from writer.openai_skt.models.llm.chain import KeywordsChain, DraftChain, TableChain
+from writer.openai_skt.models.llm.chain import ImageGenerationChain
 from writer.openai_skt.models.draft_generator import DraftGeneratorInstance
 from writer.openai_skt.models.keywords_generator import KeywordsGeneratorInstance
 from writer.openai_skt.models.table_generator import TableGeneratorInstance
 from writer.openai_skt.models.qna_assistant import QnAInstance
 from writer.openai_skt.models.draft_edit_assistant import DraftEditInstance
 from writer.openai_skt.tools.search_tool import SearchTool, SearchByURLTool
-from writer.openai_skt.tools.database_tool import DatabaseTool
+from writer.openai_skt.api.dalle_api import DalleAPI
 from writer.openai_skt.database import CustomEmbedChain
 
 class DraftsConfig(AppConfig):
@@ -33,3 +33,6 @@ class DraftsConfig(AppConfig):
         "search_tool": search_tool,
         "embed_chain": embedchain,
     }
+    
+    image_generation_chain = ImageGenerationChain(verbose=verbose)
+    dalle = DalleAPI()

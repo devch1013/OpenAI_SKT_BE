@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from rest_framework.views import APIView
 from django.http.response import StreamingHttpResponse
 from django.http import JsonResponse
@@ -7,16 +6,14 @@ from ..models import *
 from ..serializers.project_sz import *
 from ..serializers.draft_sz import *
 from ..serializers.qna_sz import *
-from ..tasks import get_suggestion, write_first_draft
 from ..apps import DraftsConfig
 from ..utils.streaming_queue import StreamingQueue
 from writer.openai_skt.modules import Project as ProjectAi
 from drf_yasg.utils import swagger_auto_schema
-import pickle
-from django.db.models import Q
 import threading
 from time import time
-
+import logging
+logger = logging.getLogger('my')    
 
 class QnAViews(APIView):
     def get(self, request, project_id):
@@ -33,8 +30,6 @@ class QnAViews(APIView):
             conversation_history.append({"user":ut.user_side, "model": ut.ai_side})
             
         return JsonResponse({"conversation": conversation_history})
-        
-        
         
         
         
@@ -58,9 +53,10 @@ class QnAViews(APIView):
         utterance = Utterance.objects.filter(conversation=conversation).order_by("timestamp")
         qna_history = list()
         if len(utterance) > 2:
-            utterance = utterance[:2]
+            utterance = utterance[-2:]
         for ut in utterance:
             qna_history.append([ut.user_side, ut.ai_side])
+        print(qna_history)
 
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
@@ -73,6 +69,7 @@ class QnAViews(APIView):
             qna_history=qna_history,
             project=project
         )
+        
         response = StreamingHttpResponse(answer, status=200, content_type="text/event-stream")
         return response
     
@@ -111,14 +108,15 @@ def qna_interceptor(conversation, question, qna_history, project):
         if streaming_queue.is_end():
             print("streaming is ended")
             break
-        ## 4개
         if not streaming_queue.is_empty():
             next_token = streaming_queue.get()
             content += next_token
-            print(next_token)
+            # print(next_token)
             yield next_token
 
+    
     time_to_response = int((time() - start) * 1000)
     new_utterance.ai_side = content
     new_utterance.time_to_response = time_to_response
     new_utterance.save()
+    logger.info(f"id: {new_utterance.id}, question: {question}, answer: {content}")

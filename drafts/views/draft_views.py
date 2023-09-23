@@ -13,7 +13,8 @@ import os
 import threading
 from time import time
 from ..utils.streaming_queue import StreamingQueue
-
+import logging
+logger = logging.getLogger('my')    
 
 class RecentDraft(APIView):
     @swagger_auto_schema(
@@ -101,6 +102,7 @@ class DraftView(APIView):
         """
         draft 생성
         """
+        
         project_instance = Project.objects.get(id=project_id)
         user_files = list()
 
@@ -111,11 +113,12 @@ class DraftView(APIView):
         new_draft = Draft(project=project_instance, status=1, table=project_instance.table)
         new_draft.save()
         draft_id = new_draft.id
-
+        logger.info(f"project {project_instance.id}, draft {new_draft.id} write request accepted")
         suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
-        for sel in project_instance.selected_suggestion.split("|"):
-            si = suggestion_instances.get(id=int(sel))
-            user_files.append((si.link, si.data_type))
+        if project_instance.selected_suggestion != None and project_instance.selected_suggestion != "":
+            for sel in project_instance.selected_suggestion.split("|"):
+                si = suggestion_instances.get(id=int(sel))
+                user_files.append((si.link, si.data_type))
 
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
@@ -124,6 +127,7 @@ class DraftView(APIView):
 
         project.add_files(user_files)
         project.parse_files_to_embedchain()
+        logger.info(f"project {project_instance.id}, draft {new_draft.id} embedding finished")
 
         result = get_draft_stream(project, draft_id, new_draft)
 
@@ -162,6 +166,7 @@ def get_draft_stream(project: ProjectAi, draft_id: int, new_draft: Draft):
     new_draft.draft = content
     new_draft.status = 2
     new_draft.save()
+    logger.info(f"project {new_draft.project.id}, draft {new_draft.id} generation finished")
 
 import json
 
@@ -174,6 +179,8 @@ class SingleDraftView(APIView):
     )
     def get(self, request, draft_id):
         draft = Draft.objects.get(id=draft_id)
+        if draft.status != 2:
+            return JsonResponse({"message": "draft "})
         response_dict = dict()
         response_dict["draft"] = draft.draft
         with open(
@@ -194,6 +201,15 @@ class SingleDraftView(APIView):
                     "sources": sources,
                 }
             )
+            
+        try:
+            dalle_image = DalleImage.objects.get(id=draft.thumbnail)
+            response_dict["image_link"] = dalle_image.link
+        except:
+            response_dict["image_link"] = None
+            
+            
+        
         # print(user_instance)
         return JsonResponse(response_dict)
 
@@ -211,7 +227,8 @@ class SingleDraftView(APIView):
         draft_instance = Draft.objects.get(id=draft_id)
         project_instance = draft_instance.project
         edit_query = DraftEditSz(data=request.data)
-        edit_query.is_valid()
+        edit_query.is_valid(raise_exception=True)
+        print(edit_query)
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
             user_instance_path=f"audrey_files/project/{project_instance.id}/user_instance.json",
@@ -220,6 +237,7 @@ class SingleDraftView(APIView):
             edit_query.data.get("query"),
             edit_query.data.get("draft_part"),
         )
+        editted_draft = editted_draft.replace("/home/ubuntu/draft/audrey_files", "https://chat-profile.audrey.kr/api/project")
         return JsonResponse({"draft": editted_draft})
 
     @swagger_auto_schema(
@@ -234,7 +252,7 @@ class SingleDraftView(APIView):
         """
         draft = Draft.objects.get(id=draft_id)
         fixed_draft = DraftTextEditSz(data=request.data)
-        fixed_draft.is_valid()
+        fixed_draft.is_valid(raise_exception=True)
         fixed_draft = fixed_draft.data.get("draft")
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),
@@ -246,6 +264,75 @@ class SingleDraftView(APIView):
         draft.save()
 
         return SuccessResponse()
+    
+
+class DalleImageView(APIView):
+    
+    @swagger_auto_schema(
+        operation_summary="Dalle 이미지 요청",
+        tags=["Draft"],
+        responses={200: DalleImageSz()},
+    )
+    def get(self, request, draft_id):
+        draft = Draft.objects.get(id=draft_id)
+        images = DalleImage.objects.filter(draft = draft)
+        images_sz = DalleImageSz(images, many=True)
+        
+        return JsonResponse(images_sz.data, safe=False)
+        
+    @swagger_auto_schema(
+        operation_summary="Dalle 이미지 생성 요청",
+        tags=["Draft"],
+        responses={200: DalleImageSz()},
+    )
+    def post(self, request, draft_id):
+        """
+        Dalle 이미지를 테이블 기반으로 생성하고 이미지 링크를 반환합니다.
+        """
+        draft = Draft.objects.get(id=draft_id)
+        image_link, image_caption = generate_image(draft.table)
+        
+        new_image_instance = DalleImage(draft = draft, prompt = image_caption, link = image_link)
+        new_image_instance.save()
+        
+        dalle_sz = DalleImageSz(new_image_instance)
+        return JsonResponse(dalle_sz.data)
+    
+    
+    @swagger_auto_schema(
+        operation_summary="Draft 대표이미지 선택",
+        tags=["Draft"],
+        request_body=ImageSelectionSz(),
+        responses={200: SuccessResponseSz()},
+    )
+    def put(self, request, draft_id):
+        draft = Draft.objects.get(id=draft_id)
+        selection_sz = ImageSelectionSz(data = request.data)
+        selection_sz.is_valid(raise_exception=True)
+        print(selection_sz.data)
+        draft.thumbnail = selection_sz.data.get("image_id")
+        draft.save()
+        return SuccessResponse()
+        
+        
+        
+        
+        
+  
+def generate_image(table: str) -> str:
+        max_retries = 3
+        attempts = 0
+        image_url = None
+        while attempts < max_retries:
+            try:
+                image_caption = DraftsConfig.image_generation_chain.run(table=table)
+                image_url = DraftsConfig.dalle.generate_image(image_caption)
+                break
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                attempts += 1
+        return image_url, image_caption
+
 
 from django.core.files.storage import FileSystemStorage
 from django.http import FileResponse
@@ -261,8 +348,26 @@ class DraftDownloadView(APIView):
         """
         draft = Draft.objects.get(id=draft_id)
         prefix = f"audrey_files/project/{draft.project.id}/drafts"
+        image_flag = False
+        try:
+            image_instance = DalleImage.objects.get(id=draft.thumbnail)
+            with open(f'{prefix}/draft_{draft_id}.md', "r") as f:
+                context = f.read()
+            with open(f'{prefix}/draft_{draft_id}_image.md', "w") as f:
+                new = f"![]({image_instance.link})\n\n" + context
+                # new = f'''<p align="center">
+                # <img src="{image_instance.link}">
+                # </p>\n\n''' + context
+                f.write(new)
+            image_flag = True
+        except Exception as e:
+            print(e)
+        
         font = "NanumMyeongjo"
-        os.system(f"pandoc {prefix}/draft_{draft_id}.md -o {prefix}/draft_{draft_id}.pdf --pdf-engine=xelatex --variable mainfont='{font}'")
+        if image_flag:
+            os.system(f"pandoc {prefix}/draft_{draft_id}_image.md -o {prefix}/draft_{draft_id}.pdf --pdf-engine=xelatex --variable mainfont='{font}'")
+        else:
+            os.system(f"pandoc {prefix}/draft_{draft_id}.md -o {prefix}/draft_{draft_id}.pdf --pdf-engine=xelatex --variable mainfont='{font}'")
         
         file_type = "application/pdf"  # django file object에 content type 속성이 없어서 따로 저장한 필드
         fs = FileSystemStorage(prefix)
@@ -271,7 +376,7 @@ class DraftDownloadView(APIView):
         response['Access-Control-Expose-Headers'] = 'Content-Disposition'
         response['Content-Disposition'] = f'attachment; filename={filename}'
         return response
-        ...
+        # pandoc audrey_files/project/481/drafts/draft_241.md -o audrey_files/project/481/drafts/draft_241.pdf --pdf-engine=xelatex --variable mainfont='NanumMyeongjo'
 
 class RegenerateView(APIView):
     @swagger_auto_schema(
@@ -299,9 +404,10 @@ class RegenerateView(APIView):
         
 
         suggestion_instances = DataSourceSuggestion.objects.filter(project=project_instance)
-        for sel in project_instance.selected_suggestion.split("|"):
-            si = suggestion_instances.get(id=int(sel))
-            user_files.append((si.link, si.data_type))
+        if not (project_instance.selected_suggestion == "" or project_instance.selected_suggestion == None):
+            for sel in project_instance.selected_suggestion.split("|"):
+                si = suggestion_instances.get(id=int(sel))
+                user_files.append((si.link, si.data_type))
 
         project = ProjectAi.load_from_file(
             **(DraftsConfig.instances),

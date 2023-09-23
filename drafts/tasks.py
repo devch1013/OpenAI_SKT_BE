@@ -17,10 +17,14 @@ def add(x, y):
     print("dhehehehehehehehehehhehehehehe")
     return x + y
 
+@shared_task
+def celery_test():
+    print("cleery!")
+    return 123
 
 @shared_task
 def get_suggestion(project_id, purpose, table):
-    # print("in celery task",kwargs)
+    print("celery task")
     project_instance = Project.objects.get(id=project_id)
     asyncio.run(async_suggestion_task(project_instance, purpose, table))
     print("task_completed")

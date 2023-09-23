@@ -6,7 +6,7 @@ from ..serializers.project_sz import *
 from ..serializers.draft_sz import *
 from ..serializers.response_sz import *
 from ..serializers.datasource_sz import *
-from ..tasks import get_suggestion
+from ..tasks import get_suggestion, celery_test
 from ..apps import DraftsConfig
 from writer.openai_skt.modules import Project as ProjectAi
 from drf_yasg.utils import swagger_auto_schema
@@ -35,6 +35,7 @@ class SuggestionView(APIView):
         print("table update request")
         project = Project.objects.get(id=project_id)
         if project.suggestion_flag == True:
+            celery_test.delay()
             return JsonResponse({"message": "suggestion already created"}, status=400)
         project_sz = UpdateTableSz(project, data=request.data)
         if project_sz.is_valid(raise_exception=True):
@@ -60,10 +61,11 @@ class SuggestionView(APIView):
         project = Project.objects.get(id=project_id)
         selection = SuggestionSz(data=request.data)
         selection.is_valid(raise_exception=True)
-        project.selected_suggestion = "|".join(
-            list(map(str, selection.data["suggestion_selection"]))
-        )
-        project.save()
+        if selection.data["suggestion_selection"] != []:
+            project.selected_suggestion = "|".join(
+                list(map(str, selection.data["suggestion_selection"]))
+            )
+            project.save()
 
         return SuccessResponse()
 
@@ -94,7 +96,6 @@ class SuggestionQueueView(APIView):
                 sz_data[source] = SuggestionInstanceSz(
                     suggestions.filter(source=source), many=True
                 ).data
-            print(sz_data)
             suggestion_sz = SuggestionResponseSz(data=sz_data)
             suggestion_sz.is_valid()
             return JsonResponse(suggestion_sz.data, json_dumps_params={"ensure_ascii": False})
@@ -204,20 +205,32 @@ class DataSourceView(APIView):
         responses={200: SuccessResponseSz()},
     )
     def delete(self, request, project_id):
-
-        project = Project.objects.get(id=project_id)
+        # print(request.data)
+        project_instance = Project.objects.get(id=project_id)
         datasource_sz = DataSourceDeleteSz(data=request.data)
         datasource_sz.is_valid(raise_exception=True)
-        if project.selected_suggestion == None or project.selected_suggestion == "":
-            return SuccessResponse()
-        suggestion_sources = list(map(int, project.selected_suggestion.split("|")))
-        for sug_delete_idx in datasource_sz.data.get("delete_suggestion_id"):
-            suggestion_sources.remove(sug_delete_idx)
-        project.selected_suggestion = "|".join(list(map(str, suggestion_sources)))
+        project = ProjectAi.load_from_file(
+            **(DraftsConfig.instances),
+            user_instance_path=f"audrey_files/project/{project_instance.id}/user_instance.json",
+        )
+        
+        # print(datasource_sz.data)
+        if not (project_instance.selected_suggestion == None or project_instance.selected_suggestion == ""):
+            suggestion_sources = list(map(int, project_instance.selected_suggestion.split("|")))
+            for sug_delete_idx in datasource_sz.data.get("delete_suggestion_id"):
+                suggestion_instance = DataSourceSuggestion.objects.get(id=sug_delete_idx)
+                print(suggestion_instance.id)
+                project.database.delete(suggestion_instance.data_type, suggestion_instance.link)
+                suggestion_sources.remove(sug_delete_idx)
+            project_instance.selected_suggestion = "|".join(list(map(str, suggestion_sources)))
+            project_instance.save()
+        
+        
+        datasources = DataSource.objects.filter(project=project_instance).filter(id__in=datasource_sz.data.get("delete_id"))
+        for ds in datasources:
+            project.database.delete(ds.data_type, ds.data)
+        datasources.delete()
         project.save()
-
-        delete_list = datasource_sz.data.get("delete_id")
-        DataSource.objects.filter(project=project).filter(id__in=delete_list).delete()
 
         return SuccessResponse()
 

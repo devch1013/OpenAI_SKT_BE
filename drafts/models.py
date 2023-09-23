@@ -44,6 +44,7 @@ class Draft(models.Model):
     uuid = models.CharField(max_length=30, blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     modified_time = models.DateTimeField(auto_now=True)
+    thumbnail = models.IntegerField(blank=True, null=True)
 
 
 class AiDraftModification(models.Model):
@@ -75,3 +76,11 @@ class Utterance(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE)
     # text = models.TextField(max_length=500)  ## 발화내용
     # stage = models.IntegerField(blank=True, null=True)
+    
+    
+class DalleImage(models.Model):
+    id = models.AutoField(primary_key=True)
+    link = models.CharField(max_length=500, blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    draft = models.ForeignKey(Draft, on_delete=models.CASCADE)
+    prompt = models.TextField(blank=True)

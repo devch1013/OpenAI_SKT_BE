@@ -7,3 +7,8 @@ db
 user
 project_instances
 audrey_files
+*.crdownload
+*.pdf
+logs
+Screenshots
+writer/openai_skt/db_backup_stop_at_75

@@ -30,6 +30,14 @@ class DraftEditSz(sz.Serializer):
     # draft = sz.CharField()
     draft_part = sz.CharField()
     
+class DalleImageSz(sz.ModelSerializer):
+    class Meta:
+        model = DalleImage
+        fields = ["id", "link"]
+
+class ImageSelectionSz(sz.Serializer):
+    image_id = sz.IntegerField()
+    
     
     
     

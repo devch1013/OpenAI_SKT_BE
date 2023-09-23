@@ -20,7 +20,7 @@ import configparser
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0,"writer/openai_skt")
+sys.path.insert(0, "writer/openai_skt")
 sys.path.append("writer/openai_skt/database/chunk/VipsPython/Vips")
 sys.path.append("writer/openai_skt/database/chunk/camelot")
 sys.path.append("writer/openai_skt/database/chunk/layout-parser")
@@ -40,30 +40,30 @@ config = configparser.ConfigParser()
 config.read(ai_secret_file)
 KEY_INFORMATION = config
 
-OPENAI_API_KEY = config['OPENAI']['OPENAI_API_KEY']
-YOUTUBE_KEY = config['YOUTUBE']['YOUTUBE_API_KEY']
-NAVER_CLIENT_ID = config['NAVER']['NAVER_CLIENT_ID']
-NAVER_CLIENT_SECRET = config['NAVER']['NAVER_CLIENT_SECRET']
-GOOGLE_SEARCH_KEY = config['GOOGLE']['GOOGLE_API_KEY']
-CSE_ID = config['GOOGLE']['CSE_ID']
-SERPAPI_API_KEY = config['SERPAPI']['SERPAPI_API_KEY']
+OPENAI_API_KEY = config["OPENAI"]["OPENAI_API_KEY"]
+YOUTUBE_KEY = config["YOUTUBE"]["YOUTUBE_API_KEY"]
+NAVER_CLIENT_ID = config["NAVER"]["NAVER_CLIENT_ID"]
+NAVER_CLIENT_SECRET = config["NAVER"]["NAVER_CLIENT_SECRET"]
+GOOGLE_SEARCH_KEY = config["GOOGLE"]["GOOGLE_API_KEY"]
+CSE_ID = config["GOOGLE"]["CSE_ID"]
+SERPAPI_API_KEY = config["SERPAPI"]["SERPAPI_API_KEY"]
 
 
-os.environ.update({'OPENAI_API_KEY': OPENAI_API_KEY})
-os.environ.update({'YOUTUBE_KEY': YOUTUBE_KEY})
-os.environ.update({'NAVER_CLIENT_ID': NAVER_CLIENT_ID})
-os.environ.update({'NAVER_CLIENT_SECRET': NAVER_CLIENT_SECRET})
-os.environ.update({'GOOGLE_SEARCH_KEY': GOOGLE_SEARCH_KEY})
-os.environ.update({'CSE_ID': CSE_ID})
-os.environ.update({'SERPAPI_API_KEY': SERPAPI_API_KEY})
+os.environ.update({"OPENAI_API_KEY": OPENAI_API_KEY})
+os.environ.update({"YOUTUBE_KEY": YOUTUBE_KEY})
+os.environ.update({"NAVER_CLIENT_ID": NAVER_CLIENT_ID})
+os.environ.update({"NAVER_CLIENT_SECRET": NAVER_CLIENT_SECRET})
+os.environ.update({"GOOGLE_SEARCH_KEY": GOOGLE_SEARCH_KEY})
+os.environ.update({"CSE_ID": CSE_ID})
+os.environ.update({"SERPAPI_API_KEY": SERPAPI_API_KEY})
 
 ###### Celery configures
 
-CELERY_BROKER_URL = "pyamqp://guest@192.168.0.70//"
+CELERY_BROKER_URL = "pyamqp://guest@localhost//"
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["10.10.10.12","chat-profile.audrey.kr"]
+ALLOWED_HOSTS = ["10.10.10.12", "chat-profile.audrey.kr", "192.168.0.95"]
 CSRF_TRUSTED_ORIGINS = ["https://chat-profile.audrey.kr"]
 
 SOCIAL_AUTH_GOOGLE_SECRET = secrets.get("SOCIAL_AUTH_GOOGLE_SECRET")
@@ -123,6 +123,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    'request_logging.middleware.LoggingMiddleware',
     # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -201,3 +202,84 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 JWT_CONF = {
     "TOKEN_LIFETIME_HOURS": 10000,
 }
+
+
+#### Logger Option
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+    },
+    "formatters": {
+        "django.server": {
+            "()": "django.utils.log.ServerFormatter",
+            "format": "[{server_time}] {message}",
+            "style": "{",
+        },
+        "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "filters": ["require_debug_true"],
+            "class": "logging.StreamHandler",
+        },
+        "django.server": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "django.server",
+        },
+        "file": {
+            "level": "INFO",
+            "encoding": "utf-8",
+            "filters": ["require_debug_true"],
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs/mysite.log",
+            "maxBytes": 1024 * 1024 * 5,  # 5 MB
+            "backupCount": 5,
+            "formatter": "standard",
+        },
+        "my_file": {
+            "level": "INFO",
+            "encoding": "utf-8",
+            "filters": [],
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs/mylog.log",
+            "maxBytes": 1024 * 1024 * 5,  # 5 MB
+            "backupCount": 5,
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+        "django.server": {
+            "handlers": ["django.server"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["file"],
+            "propagate": False,
+            "level": "INFO",
+        },
+        "my": {
+            "handlers": ["console", "my_file"],
+            "level": "INFO",
+        },
+    },
+}
+
+MAX_UPLOAD_SIZE = 5242880
+DATA_UPLOAD_MAX_MEMORY_SIZE = None
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880
+DATA_UPLOAD_MAX_NUMBER_FIELDS = None

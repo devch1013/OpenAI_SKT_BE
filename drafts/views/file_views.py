@@ -53,3 +53,15 @@ class ProfileImageView(APIView):
         response['Content-Disposition'] = f'attachment; filename={filename}'
         
         return response
+    
+class ImageView(APIView):
+    authentication_classes = []
+    def get(self, request, filename):
+        storage = f"audrey_files/images"
+        file_type = "image/png"  # django file object에 content type 속성이 없어서 따로 저장한 필드
+        fs = FileSystemStorage(storage)
+        response = FileResponse(fs.open(filename, 'rb'), content_type=file_type)
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response

@@ -19,12 +19,14 @@ urlpatterns = [
     path("<int:project_id>", SingleProject.as_view()),
     # path("draft/<int:draft_id>/queue", DraftQueueView.as_view()),
     # path("draft/<int:draft_id>/table", DraftQueueView.as_view()),
+    path("draft/<int:draft_id>/image", DalleImageView.as_view()),
     path("draft/<int:draft_id>/regenerate", RegenerateView.as_view()),
     path("draft/<int:draft_id>/download", DraftDownloadView.as_view()),
     path("draft/<int:draft_id>", SingleDraftView.as_view()),
     
     path("resource/<int:source_id>", DataSourceFileView.as_view()),
     path("profile_image", ProfileImageView.as_view()),
+    path("images/<str:filename>", ImageView.as_view()),
     
     
     path("test", api_test),
